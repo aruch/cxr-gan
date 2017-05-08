@@ -1,0 +1,32 @@
+import os
+import numpy as np
+from scipy.io import loadmat
+
+class Cxr(object):
+    def __init__(self, data_file):
+        if os.path.exists(data_file):
+            self._load(data_file)
+        else:
+            print "{:s} does not exist".format(data_file)
+
+    def _load(self, data_file):
+        print 'Preparing file'
+        x = loadmat(data_file)['images']
+        x = x.astype('float32')
+        x /= 255.
+        x -= 0.5
+        self.x = x
+
+    def norm(self, x):
+        return x - 0.5
+
+    def denorm(self, x):
+        return np.clip(x + 0.5, 0, 1)
+
+    def next_batch(self, bs):
+        idx = np.random.choice(len(self.x), bs, replace=False)
+        return self.x[idx]
+
+if __name__ == '__main__':
+    cxr = Cxr()
+    print cxr.x[:10000].min(), cxr.x[:10000].max()
