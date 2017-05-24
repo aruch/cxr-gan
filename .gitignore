@@ -87,3 +87,10 @@ ENV/
 
 # Rope project settings
 .ropeproject
+
+# SBatch stuff
+*.err
+*.out
+
+# Images
+*.png
