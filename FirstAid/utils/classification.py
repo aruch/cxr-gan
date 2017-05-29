@@ -129,13 +129,14 @@ class classifier:
         self.cost = self.ce_loss + self.L2_loss + self.L1_loss
         self.prob = tf.nn.softmax(self.pred)
         self.acc = get_accuracy(self.pred, self.yTe)
-        self.n_epochs=2
+        self.n_epochs = opts.max_epoch
+        self.print_every = opts.print_every
+        self.n_batch_val = opts.n_batch_val
 
         # Listing the data.
         if self.opts.path_train:
             self.iter_count = self.ds.n_batches
             self.epoch_every = self.ds.n_batches
-            self.print_every = 100
         else:
             self.iter_count, self.epoch_every, self.print_every = calculate_iters(1000, self.opts.max_epoch, self.opts.batch_size)
         if self.opts.path_test:
@@ -410,7 +411,7 @@ class classifier:
                         if iter == self.iter_count-1:
                             loss_val, acc_val,preds,truths = self.test(self.opts.path_validation)
                         else:
-                            loss_val, acc_val,preds,truths = self.test(self.opts.path_validation, 100)
+                            loss_val, acc_val,preds,truths = self.test(self.opts.path_validation, self.n_batch_val)
                         self.val_loss.append(loss_val)
                         self.val_acc.append(acc_val)
                         statement += " Loss_val: " + str(loss_val)

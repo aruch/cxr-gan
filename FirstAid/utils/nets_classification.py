@@ -75,8 +75,8 @@ def VGG11_Net(layer, is_training, class_num, batch_size, keep_prob=1.0, name="VG
                          [3,512],[3,512],[0,2],
                          [3,512],[3,512],[0,2]]
     layer = general_conv(layer, is_training, architecture_conv, name=name)
-    layer = dense_bn_do_relu(layer, is_training, 4096, keep_prob, name=name+'_hidden1')
-    layer = dense_bn_do_relu(layer, is_training, 4096, keep_prob, name=name+'_hidden2')
+    layer = dense_bn_do_relu(layer, is_training, 1024, keep_prob, name=name+'_hidden1')
+    layer = dense_bn_do_relu(layer, is_training, 1024, keep_prob, name=name+'_hidden2')
     layer = dense_w_bias(layer, class_num, name=name+'_output')
     return layer
 
@@ -95,8 +95,8 @@ def VGG13_Net(layer, is_training, class_num, batch_size, keep_prob=1.0, name="VG
                          [3,512],[3,512],[0,2],
                          [3,512],[3,512],[0,2]]
     layer = general_conv(layer, is_training, architecture_conv, name=name)
-    layer = dense_bn_do_relu(layer, is_training, 4096, keep_prob, name=name+'_hidden1')
-    layer = dense_bn_do_relu(layer, is_training, 4096, keep_prob, name=name+'_hidden2')
+    layer = dense_bn_do_relu(layer, is_training, 1024, keep_prob, name=name+'_hidden1')
+    layer = dense_bn_do_relu(layer, is_training, 1024, keep_prob, name=name+'_hidden2')
     layer = dense_w_bias(layer, class_num, name=name+'_output')
     return layer
 

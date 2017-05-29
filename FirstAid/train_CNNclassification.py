@@ -36,6 +36,10 @@ def main(args):
     parser.add_argument("--l1", dest="l1", type=float, default=0.0)
     parser.add_argument("--bs", dest="batch_size", type=int, default=12)
     parser.add_argument("--ep", dest="max_epoch", type=int, default=10)
+    # print every n batches
+    parser.add_argument("--print_every", dest="print_every", type=int, default=500)
+    # use n batches for intermediate validation error
+    parser.add_argument("--n_batch_val", dest="n_batch_val", type=int, default=500)
     parser.add_argument("--time", dest="max_time", type=int, default=1440)
 
     # Switches
@@ -47,12 +51,9 @@ def main(args):
     # Creating Object
     opts = parser.parse_args(args[1:])
     CNN_obj = classifier(opts)
-    print("HERE")
     CNN_obj.train_model() #Train/Validate the Model
     return 0
-    print("HERE2")
     CNN_obj.test_model() #Test the Model.
-    print("HERE3")
     CNN_obj.do_inference() #Do inference on inference set.
 
     # We're done.
