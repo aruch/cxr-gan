@@ -10,7 +10,7 @@ from multiprocessing import Process, Queue
 DATA_DIR = "/scratch/users/aruch/nerdd"
 
 class DataStream:
-    def __init__(self, h5_path, img_size=64, n_img_per_seg=2000, batch_size=16):
+    def __init__(self, h5_path, img_size=64, n_img_per_seg=2000, batch_size=16, ap_only=False):
         """
         Args:
             h5_name (str): file name
@@ -20,34 +20,54 @@ class DataStream:
         """
         self.f = h5py.File(h5_path)
         if img_size==64:
-            img_name = "images64"
+            img_name = "images_norm64"
         elif img_size==128:
-            img_name = "images128"
+            img_name = "images_norm128"
+        elif img_size==256:
+            img_name = "images_norm128"
         else:
             img_name = "images_norm"
 
         self.images = self.f[img_name]
         self.labels = self.f["label"]
 
+        self.tot_images = self.images.shape[0]
+        self.ap_only = ap_only
         self.n_images = self.images.shape[0]
-        self.n_batches = int(np.ceil(float(self.n_images) / batch_size))
         self.batch_per_seg = int(np.round(float(n_img_per_seg) / batch_size))
         self.image_per_seg =  self.batch_per_seg * batch_size
         self.n_seg = int(np.ceil(float(self.n_images) / self.image_per_seg))
         self.img_size = img_size
         self.batch_size = batch_size
 
+        if ap_only:
+            self.n_batches = 0
+            for i in range(self.n_seg): 
+                seg_start = i * self.image_per_seg
+                seg_end = min(self.n_images, seg_start + self.image_per_seg) 
+                n_ap_images = np.sum(self.f["isAP"][seg_start:seg_end])
+                batch_in_seg = int(np.ceil(float(n_ap_images)/self.batch_size))
+                self.n_batches += batch_in_seg
+        else:
+            self.n_batches = int(np.ceil(float(self.n_images) / batch_size))
+
     def load_next_segment(self, random=True):
         if self.cur_seg >= self.n_seg:
             return
-        seg_start = self.cur_seg * self.image_per_seg
+        self.cur_seg_idx = self.seg_idx[self.cur_seg]
+        seg_start = self.cur_seg_idx * self.image_per_seg
         seg_end = min(self.n_images, seg_start + self.image_per_seg) 
         self.image_cache = self.images[seg_start:seg_end]
         self.label_cache = self.labels[seg_start:seg_end]
         self.label_cache[self.label_cache==2] = 1
-        self.idxs = np.random.permutation(seg_end-seg_start)
+
+	if self.ap_only:
+	    ap_image_indices = self.f["isAP"][seg_start:seg_end]
+            self.idxs = np.random.permutation(np.arange(seg_end-seg_start)[ap_image_indices])
+        else:
+            self.idxs = np.random.permutation(np.arange(seg_end-seg_start))
         self.cur_batch = 0
-        self.batch_in_seg = int(np.ceil(float(seg_end-seg_start)/self.batch_size))
+        self.batch_in_seg = int(np.ceil(float(self.idxs.shape[0])/self.batch_size))
         self.cur_seg += 1
 
     def prep_minibatches(self, random=True):
@@ -96,12 +116,12 @@ if __name__=="__main__":
     n_img_per_seg = 2000
 
     d = DataStream(img_size=im_size, batch_size=batch_size, n_img_per_seg=n_img_per_seg,
-                   h5_path=os.path.join(DATA_DIR, "val_sub.hdf5"))
+                   h5_path=os.path.join(DATA_DIR, "val_sub.hdf5"), ap_only=True)
 
     print("Batch Size: {:}".format(batch_size))
-    print("Image Size: {:} x {:}".format(*im_size))
+    print("Image Size: {0:} x {0:}".format(im_size))
 
-    N = 40000/batch_size
+    N = 4000/batch_size
     
     tic = time.time()
     d.prep_minibatches(random=True)

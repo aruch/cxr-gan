@@ -41,6 +41,7 @@ def main(args):
     # use n batches for intermediate validation error
     parser.add_argument("--n_batch_val", dest="n_batch_val", type=int, default=500)
     parser.add_argument("--time", dest="max_time", type=int, default=1440)
+    parser.add_argument("--ap_only", dest="ap_only", type=int, default=0)
 
     # Switches
     parser.add_argument("--bLo", dest="bool_load", type=int, default=0)

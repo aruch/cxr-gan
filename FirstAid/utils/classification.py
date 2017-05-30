@@ -101,7 +101,7 @@ class classifier:
         # Creating the Placeholders.
         if self.opts.path_train:
             self.ds = DataStream(img_size=opts.image_size, batch_size=opts.batch_size,
-                                 h5_path=opts.path_train)
+                                 h5_path=opts.path_train, ap_only=opts.ap_only)
             self.matrix_size = opts.image_size
             self.num_channels = 1
         elif self.opts.path_test:
@@ -119,6 +119,7 @@ class classifier:
         self.yTr = tf.placeholder(tf.int64, yTr_size)
         self.is_training = tf.placeholder_with_default(1, shape=())
         self.keep_prob = tf.placeholder(tf.float32)
+        self.ap_only = opts.ap_only
 
         # Creating the Network for Testing
         exec_statement = create_exec_statement_test(opts)
@@ -339,8 +340,7 @@ class classifier:
         - n_batches: (int/None) None tests all batches
         """
         # Initializing variables.
-        ds_test = DataStream(img_size=self.opts.image_size, batch_size=self.opts.batch_size,
-                             h5_path=path_X)
+        ds_test = DataStream(img_size=self.opts.image_size, batch_size=self.opts.batch_size, h5_path=path_X, ap_only=self.ap_only)
         
         acc_te  = 0.0
         loss_te = 0.0
@@ -354,8 +354,8 @@ class classifier:
         for iter_data in range(n_batches):
             # Reading in the data.
             loss_iter_iter, acc_iter_iter,pred_iter_iter,truth_iter_iter = self.test_one_iter(ds_test)
-            loss_te += loss_iter_iter / n_batches
-            acc_te += acc_iter_iter / n_batches
+            loss_te += loss_iter_iter
+            acc_te += acc_iter_iter
             if counter == 0:
                 preds = pred_iter_iter
                 truths = truth_iter_iter
@@ -363,6 +363,10 @@ class classifier:
             else:
                 preds = np.concatenate((preds, pred_iter_iter), 0)
                 truths = np.concatenate((truths, truth_iter_iter), 0)
+
+        loss_te /= n_batches
+        acc_te /= n_batches 
+        
         return loss_te, acc_te, preds, truths
         
     
@@ -391,12 +395,12 @@ class classifier:
             self.ds.prep_minibatches()
             for iter in range(self.iter_count):
                 loss_temp, acc_temp = self.train_one_iter(iter)
-                loss_tr += loss_temp / self.print_every
-                acc_tr += acc_temp / self.print_every
+                loss_tr += loss_temp
+                acc_tr += acc_temp
                 if ((iter)%self.print_every) == 0 or iter == self.iter_count-1:
-                    if iter == 0:
-                        loss_tr *= self.print_every
-                        acc_tr *= self.print_every
+                    if iter != 0:
+                        loss_tr /= self.print_every
+                        acc_tr /= self.print_every
                     self.tr_loss.append(loss_tr)
                     self.tr_acc.append(acc_tr)
                     current_time = time.time()
