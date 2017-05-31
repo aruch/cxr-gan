@@ -23,7 +23,10 @@ parser.add_argument('--seed_data', default=1)
 parser.add_argument('--batch_size', default=16, type=int)
 parser.add_argument('--image_size', default=512, type=int)
 parser.add_argument('--learning_rate', type=float, default=0.0001)
-parser.add_argument('--data_dir', type=str, default='/scratch/users/aruch/nerdd')
+parser.add_argument('--ap_only', type=int, default=0)
+parser.add_argument('--train_path', type=str, default='/scratch/users/aruch/nerdd/train_sub.hdf5')
+parser.add_argument('--val_path', type=str, default='/scratch/users/aruch/nerdd/val_sub.hdf5')
+parser.add_argument('--test_path', type=str, default='/scratch/users/aruch/nerdd/test_sub.hdf5')
 args = parser.parse_args()
 print(args)
 
@@ -58,7 +61,7 @@ def inceptionModule(input_layer, nfilters):
     return inception_net
 
 disc_layers = [ll.InputLayer(shape=(None, 1, args.image_size, args.image_size))]
-disc_layers.append(ll.MaxPool2DLayer(disc_layers[-1], 64, 7, stride=2, pad=3, flip_filters=False))
+disc_layers.append(ll.Conv2DDNNLayer(disc_layers[-1], 64, 7, stride=2, pad=3, flip_filters=False))
 disc_layers.append(ll.MaxPool2DLayer(disc_layers[-1], pool_size=3, stride=2, ignore_border=False))
 disc_layers.append(ll.LocalResponseNormalization2DLayer(disc_layers[-1], alpha=0.00002, k=1))
 disc_layers.append(dnn.Conv2DDNNLayer(disc_layers[-1], 64, 1, flip_filters=False))
@@ -137,15 +140,6 @@ for epoch in range(15):
         ll, te = train_batch_disc(batchx,batchy,lr)
         loss_lab += ll
         train_err += te
-
-        # if t % 100 == 0:
-        #     test_err = 0. 
-        #     nnn = 10
-        #     for i in range(nnn):
-        #         test_err += test_batch(testx[i*args.batch_size:(i+1)*args.batch_size],testy[i*args.batch_size:(i+1)*args.batch_size])
-        #     test_err /= nnn
-        #     print("%.4f" % (test_err,))
-        
 
     loss_lab /= ds_train.n_batches
     train_err /= ds_train.n_batches
