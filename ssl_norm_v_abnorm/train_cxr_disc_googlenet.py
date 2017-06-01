@@ -7,6 +7,7 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams
 import lasagne
 import lasagne.updates as lupd
 import lasagne.layers as ll
+from lasagne.nonlinearities import softmax, linear
 from lasagne.init import Normal
 from lasagne.layers import dnn
 import nn
@@ -23,7 +24,7 @@ parser.add_argument('--seed_data', default=1)
 parser.add_argument('--batch_size', default=16, type=int)
 parser.add_argument('--image_size', default=512, type=int)
 parser.add_argument('--learning_rate', type=float, default=0.0001)
-parser.add_argument('--data_dir', type=str, default='/scratch/users/aruch/nerdd')
+parser.add_argument('--data_dir', type=str, default='/home/willdu/cxr-gan/data/')
 args = parser.parse_args()
 print(args)
 
@@ -58,7 +59,7 @@ def inceptionModule(input_layer, nfilters):
     return inception_net
 
 disc_layers = [ll.InputLayer(shape=(None, 1, args.image_size, args.image_size))]
-disc_layers.append(ll.MaxPool2DLayer(disc_layers[-1], 64, 7, stride=2, pad=3, flip_filters=False))
+disc_layers.append(dnn.Conv2DDNNLayer(disc_layers[-1], 64, 7, stride=2, pad=3, flip_filters=False))
 disc_layers.append(ll.MaxPool2DLayer(disc_layers[-1], pool_size=3, stride=2, ignore_border=False))
 disc_layers.append(ll.LocalResponseNormalization2DLayer(disc_layers[-1], alpha=0.00002, k=1))
 disc_layers.append(dnn.Conv2DDNNLayer(disc_layers[-1], 64, 1, flip_filters=False))
@@ -111,7 +112,7 @@ for p in disc_params:
     disc_param_avg.append(th.shared(np.cast[th.config.floatX](0.*p.get_value()), broadcastable=p.broadcastable))
 disc_avg_updates = [(a,a+0.01*(p-a)) for p,a in zip(disc_params,disc_param_avg)]
 disc_avg_givens = [(p,a) for p,a in zip(disc_params,disc_param_avg)]
-init_param = th.function(inputs=[x_lab], outputs=None, updates=init_updates) # data based initialization
+init_param = th.function(inputs=[x_lab], outputs=None, updates=init_updates, on_unused_input='ignore') # data based initialization
 train_batch_disc = th.function(inputs=[x_lab,labels,lr], outputs=[loss_lab, train_err], updates=disc_param_updates+disc_avg_updates)
 # Need to tweak avg update weight if we want to use givens
 test_batch2 = th.function(inputs=[x_lab,labels], outputs=test_err, givens=disc_avg_givens)
