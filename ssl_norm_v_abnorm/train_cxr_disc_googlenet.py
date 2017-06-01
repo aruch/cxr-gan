@@ -13,6 +13,7 @@ import nn
 import sys
 import plotting
 import cxr_data
+from sklearn.metrics import confusion_matrix
 from data_stream import DataStream
 import cPickle
 
@@ -27,6 +28,9 @@ parser.add_argument('--ap_only', type=int, default=0)
 parser.add_argument('--train_path', type=str, default='/scratch/users/aruch/nerdd/train_sub.hdf5')
 parser.add_argument('--val_path', type=str, default='/scratch/users/aruch/nerdd/val_sub.hdf5')
 parser.add_argument('--test_path', type=str, default='/scratch/users/aruch/nerdd/test_sub.hdf5')
+parser.add_argument('--print_every', type=int, default=500)
+parser.add_argument('--n_val', type=int, default=100)
+parser.add_argument('--n_class', type=int, default=2)
 args = parser.parse_args()
 print(args)
 
@@ -37,10 +41,10 @@ theano_rng = MRG_RandomStreams(rng.randint(2 ** 15))
 lasagne.random.set_rng(np.random.RandomState(rng.randint(2 ** 15)))
 
 # load CIFAR-10
-ds_train = DataStream(d=args.data_dir, img_size=args.image_size,
-                      batch_size=args.batch_size, h5_name="train_sub.hdf5")
-ds_test = DataStream(d=args.data_dir, img_size=args.image_size,
-                     batch_size=args.batch_size, h5_name="val_sub.hdf5")
+ds_train = DataStream(img_size=args.image_size,
+                      batch_size=args.batch_size, h5_path=args.train_path)
+ds_test = DataStream(img_size=args.image_size,
+                     batch_size=args.batch_size, h5_path=args.val_path)
 print("DATA LOADERS CREATED")
 
 def inceptionModule(input_layer, nfilters):
@@ -56,12 +60,12 @@ def inceptionModule(input_layer, nfilters):
     inception_net.append(dnn.Conv2DDNNLayer(input_layer, nfilters[4], 1, flip_filters=False)) #5
     inception_net.append(dnn.Conv2DDNNLayer(inception_net[-1], nfilters[5], 5, pad=2, flip_filters=False)) #6
 
-    inception_net.append(ll.ConcatLayer([inception_net[2], inception_net[4], inception_net[6], inception_net[1],])) #7
+    inception_net.append(ll.ConcatLayer([inception_net[2], inception_net[4], inception_net[6], inception_net[1]])) #7
 
     return inception_net
 
 disc_layers = [ll.InputLayer(shape=(None, 1, args.image_size, args.image_size))]
-disc_layers.append(ll.Conv2DDNNLayer(disc_layers[-1], 64, 7, stride=2, pad=3, flip_filters=False))
+disc_layers.append(dnn.Conv2DDNNLayer(disc_layers[-1], 64, 7, stride=2, pad=3, flip_filters=False))
 disc_layers.append(ll.MaxPool2DLayer(disc_layers[-1], pool_size=3, stride=2, ignore_border=False))
 disc_layers.append(ll.LocalResponseNormalization2DLayer(disc_layers[-1], alpha=0.00002, k=1))
 disc_layers.append(dnn.Conv2DDNNLayer(disc_layers[-1], 64, 1, flip_filters=False))
@@ -80,8 +84,9 @@ disc_layers.append(ll.MaxPool2DLayer(disc_layers[-1], pool_size=3, stride=2, ign
 disc_layers.extend(inceptionModule(disc_layers[-1], [128, 256, 160, 320, 32, 128]))
 disc_layers.extend(inceptionModule(disc_layers[-1], [128, 384, 192, 384, 48, 128]))
 disc_layers.append(ll.GlobalPoolLayer(disc_layers[-1]))
-disc_layers.append(ll.DenseLayer(disc_layers[-1],num_units=1000, nonlinearity=linear))
-disc_layers.append(ll.NonlinearityLayer(disc_layers[-1], nonlinearity=softmax))
+disc_layers.append(ll.DropoutLayer(disc_layers[-1], p=0.5))
+disc_layers.append(ll.DenseLayer(disc_layers[-1], num_units=args.n_class, nonlinearity=lasagne.nonlinearities.linear))
+disc_layers.append(ll.NonlinearityLayer(disc_layers[-1], nonlinearity=lasagne.nonlinearities.softmax))
 disc_params = ll.get_all_params(disc_layers, trainable=True)
 
 print("DISCRIMINATOR CREATED")
@@ -101,7 +106,8 @@ train_err = T.mean(T.neq(T.argmax(output_before_softmax_lab,axis=1),labels))
 
 # test error
 output_before_softmax = ll.get_output(disc_layers[-1], x_lab, deterministic=True)
-test_err = T.mean(T.neq(T.argmax(output_before_softmax,axis=1),labels))
+test_pred = T.argmax(output_before_softmax,axis=1)
+test_err = T.mean(T.neq(test_pred,labels))
 
 print("ERROR FUNCTIONS CREATED")
 
@@ -114,16 +120,16 @@ for p in disc_params:
     disc_param_avg.append(th.shared(np.cast[th.config.floatX](0.*p.get_value()), broadcastable=p.broadcastable))
 disc_avg_updates = [(a,a+0.01*(p-a)) for p,a in zip(disc_params,disc_param_avg)]
 disc_avg_givens = [(p,a) for p,a in zip(disc_params,disc_param_avg)]
-init_param = th.function(inputs=[x_lab], outputs=None, updates=init_updates) # data based initialization
+init_param = th.function(inputs=[x_lab], outputs=None, updates=init_updates, on_unused_input='ignore') # data based initialization
 train_batch_disc = th.function(inputs=[x_lab,labels,lr], outputs=[loss_lab, train_err], updates=disc_param_updates+disc_avg_updates)
 # Need to tweak avg update weight if we want to use givens
-test_batch2 = th.function(inputs=[x_lab,labels], outputs=test_err, givens=disc_avg_givens)
-test_batch = th.function(inputs=[x_lab,labels], outputs=test_err)
+test_batch = th.function(inputs=[x_lab,labels], outputs=[test_err, test_pred], givens=disc_avg_givens)
+#test_batch = th.function(inputs=[x_lab,labels], outputs=test_err)
 
 print("TRAINING FUNCTIONS CREATED")
 
 # //////////// perform training //////////////
-for epoch in range(15):
+for epoch in range(10):
     begin = time.time()
     lr = np.cast[th.config.floatX](args.learning_rate * np.minimum(3. - epoch/400., 1.))
 
@@ -141,23 +147,43 @@ for epoch in range(15):
         loss_lab += ll
         train_err += te
 
+        if t % args.print_every == 0:
+            test_err = 0.
+            ds_test.prep_minibatches()
+            pred = np.array([])
+            actual = np.array([])
+            for b in range(args.n_val):
+                batchx, batchy = ds_test.next_batch()
+                batch_err, batch_pred = test_batch(batchx, batchy)
+                test_err += batch_err
+                pred = np.concatenate([pred, batch_pred]) 
+                actual = np.concatenate([actual, batchy]) 
+
+            test_err /= args.n_val
+            print(time.time()-begin) 
+            print(test_err)
+            print(confusion_matrix(actual, pred))
+
     loss_lab /= ds_train.n_batches
     train_err /= ds_train.n_batches
 
     # test
     test_err = 0.
-    test_err2 = 0.
     ds_test.prep_minibatches()
+    pred = np.array([])
+    actual = np.array([])
     for t in range(ds_test.n_batches):
         batchx, batchy = ds_test.next_batch()
-        test_err += test_batch(batchx,batchy)
-        test_err2 += test_batch(batchx,batchy)
+        batch_err, batch_pred = test_batch(batchx, batchy)
+        test_err += batch_err
+        pred = np.concatenate([pred, batch_pred]) 
+        actual = np.concatenate([actual, batchy]) 
 
     test_err /= ds_test.n_batches
-    test_err2 /= ds_test.n_batches
 
     # report
-    print("Iteration %d, time = %ds, loss_lab = %.4f, train err = %.4f, test err = %.4f, test err avg. = %.4f" % (epoch, time.time()-begin, loss_lab, train_err, test_err, test_err2))
+    print("Iteration %d, time = %ds, loss_lab = %.4f, train err = %.4f, test err avg. = %.4f" % (epoch, time.time()-begin, loss_lab, train_err, test_err))
+    print(confusion_matrix(actual, pred))
     sys.stdout.flush()
 
     # save params
